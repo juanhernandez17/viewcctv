@@ -6,7 +6,7 @@ import platform
 import threading
 from time import sleep
 import vlc
-from threading import Thread
+from itertools import cycle
 
 # For PyQt5 :
 from PyQt5.QtWidgets import QApplication, QMainWindow, QShortcut, QWidget, QListWidget, QListWidgetItem, QFileDialog
@@ -14,19 +14,20 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 import qdarktheme
 from PyQt5.QtGui import QKeySequence
 
+
 class PlaylistWindow(QWidget):
 	lSignal = QtCore.pyqtSignal(list)
 
 	def __init__(self, filename):
-		super(PlaylistWindow,self).__init__()
-  
+		super(PlaylistWindow, self).__init__()
+
 		self.filename = filename
 		self.layout = QtWidgets.QVBoxLayout()
 		self.label = QtWidgets.QLabel("Playlist Window")
 		self.layout.addWidget(self.label)
 		self.setLayout(self.layout)
 		self.loadStreams()
-  
+
 		# Right Click Menu
 		self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.customContextMenuRequested.connect(self.right_menu)
@@ -68,9 +69,9 @@ class PlaylistWindow(QWidget):
 
 # Each Stream gets a widget with the stream url as the header
 class WinFrams(QtWidgets.QWidget):
-	def __init__(self, parent=None, title=None, mediaplayer=None):
+	def __init__(self, parent=None, title="", mediaplayer=None):
 		super(WinFrams, self).__init__(parent)
-  
+
 		self.layout = QtWidgets.QVBoxLayout()
 		self.mediaplayer = mediaplayer
 		self.name = QtWidgets.QLabel(parent=self)
@@ -79,23 +80,23 @@ class WinFrams(QtWidgets.QWidget):
 		# self.name.setContentsMargins(0, 0, 0, 0)
 
 		self.name.setAlignment(QtCore.Qt.AlignCenter)
-		
+
 		self.video = QtWidgets.QWidget()
-  
+
 		self.layout.setSpacing(0)
 		self.layout.setContentsMargins(0, 0, 0, 0)
 		self.setLayout(self.layout)
 		self.layout.addWidget(self.name)
-  
+
 		self.volumeslider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
 		self.volumeslider.setMaximum(100)
 		self.volumeslider.setValue(self.mediaplayer.audio_get_volume())
 		self.volumeslider.setToolTip("Volume")
 		self.layout.addWidget(self.volumeslider)
 		self.volumeslider.valueChanged.connect(self.setVolume)
-		
+
 		self.layout.addWidget(self.video)
-  
+
 		self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.customContextMenuRequested.connect(self.right_menu)
 
@@ -114,18 +115,16 @@ class WinFrams(QtWidgets.QWidget):
 
 		# Position
 		menu.exec_(self.mapToGlobal(pos))
-  
+
 	def deleteStream(self):
-		# self.mediaplayer.stop()
 		self.setParent(None)
 		self.mediaplayer.release()
-		# self.deleteLater()
-  
+
 	def eventFilter(self, obj, event):
 		if event.type() == QtCore.QEvent.HoverEnter:
 			self.onHovered()
 		return super(WinFrams, self).eventFilter(obj, event)
-  
+
 	def onHovered(self):
 		print("hovered")
 
@@ -133,8 +132,6 @@ class WinFrams(QtWidgets.QWidget):
 		return self.video.winId()
 
 	def setVolume(self, Volume):
-		"""Set the volume
-		"""
 		self.mediaplayer.audio_set_volume(Volume)
 
 	# TODO: maybe add ability to move streams around
@@ -147,7 +144,7 @@ class WinFrams(QtWidgets.QWidget):
 
 # Grid for the streams to be putin
 class GridPlayer(QWidget):
-	def __init__(self, parent=None, videoframes=None):
+	def __init__(self, parent=None, medias=None):
 		super(GridPlayer, self).__init__(parent)
 		self.layout = QtWidgets.QGridLayout()
 
@@ -156,52 +153,20 @@ class GridPlayer(QWidget):
 		self.layout.setContentsMargins(0, 0, 0, 0)
 
 		self.setLayout(self.layout)
-		for videoframe in videoframes:
-			self.layout.addWidget(videoframe)
 		self.maxx = 1
 		self.maxy = 1
 		self.x = 0
 		self.y = 0
+		for media in medias:
+			self.createWidget(media)
 
-	# Attempt one at adding a right-down growing grid FAILED for the most part
-	def addW(self, widget):
-		self.layout.addWidget(widget, self.x, self.y)
-		nm = self.layout.count()
-		# this logic need more work breaks after 4 streams opened/2:2 grid
-		if self.isPerf(nm):
-			self.maxx += 1
-			self.maxy += 1
-			self.x = self.maxx
-			self.y = 0
-		elif self.x < self.maxx:
-			self.x += 1
-		elif self.x == self.maxx:
-			if self.y < self.maxy:
-				self.x = 0
-				self.y += 1
-			else:
-				self.x = 0
-				self.y += 1
-		elif self.y < self.maxy:
-			self.y += 1
-		elif self.y == self.maxy:
-			if self.x < self.maxx:
-				self.y = 0
-				self.x += 1
-			else:
-				self.y = 0
-				self.x += 1
-		else:
-			self.x += 1
-
-	# returns whether a number is perfect square used to grow the grid size
-	def isPerf(self, num):
-		root = math.sqrt(num)
-		# check number is perfecct square
-		if int(root + 0.5) ** 2 == num:
-			return True
-		else:
-			return False
+	def createWidget(self, media):
+		videoframe = WinFrams(mediaplayer=media)
+		videoframe.setAutoFillBackground(True)
+		media.stop()
+		media.set_hwnd(int(videoframe.winId()))
+		self.addWid(videoframe)
+		media.play()
 
 	# better way of growing the grid size
 	def calcSize(self):
@@ -210,38 +175,90 @@ class GridPlayer(QWidget):
 		self.maxx = math.ceil(root)
 		self.maxy = math.ceil(num / self.maxx)
 
-	# "dumb" way to add new streams to grid, checks every square from top to bottom left to right inserfts it at the first open spot
-	def addWid(self,widget):
+	# "dumb" way to add new streams to grid, checks every square from top to bottom left to right inserts it at the first open spot
+	def addWid(self, widget):
 		x = 0
 		y = 0
 		added = False
 		for y in range(self.maxy):
 			for x in range(self.maxx):
-				if self.layout.itemAtPosition(y,x) == None:
-					self.layout.addWidget(widget,y,x)
+				if self.layout.itemAtPosition(y, x) == None:
+					self.layout.addWidget(widget, y, x)
 					added = True
 					break
-			if added: break
+			if added:
+				break
 		self.calcSize()
 		if not added:
 			self.addWid(widget)
 
+	def getPlayers(self):
+		players = []
+		for x in range(self.maxx):
+			for y in range(self.maxy):
+				w = self.layout.itemAtPosition(y, x)
+				if w:
+					players.append(w.widget())
+				else:
+					continue
+		return players
+
+# Grid for the streams to be putin
+class VerticalPlayer(QWidget):
+	def __init__(self, parent=None, medias=None):
+		super(VerticalPlayer, self).__init__(parent)
+		self.layout = QtWidgets.QGridLayout()
+
+		# remove spacing between objects
+		self.layout.setSpacing(0)
+		self.layout.setContentsMargins(0, 0, 0, 0)
+
+		self.setLayout(self.layout)
+		for media in medias:
+			self.createWidget(media)
+
+	def createWidget(self, media):
+		videoframe = WinFrams(mediaplayer=media)
+		videoframe.setAutoFillBackground(True)
+		media.stop()
+		media.set_hwnd(int(videoframe.winId()))
+		self.addWid(videoframe)
+		media.play()
+  
+  
+	def addWid(self, widget):
+		self.layout.addWidget(widget)
+
+	def getPlayers(self):
+		players = []
+		for x in range(self.layout.count()):
+			w = self.layout.itemAt(x)
+			if w:
+				players.append(w.widget())
+			else:
+				continue
+		return players
+
+
 class MainWindow(QMainWindow):
-	
 	def __init__(self, parent=None):
 		super(MainWindow, self).__init__(parent)
-		self.running = True # used to stop child threads
-		# self.setWindowFlag(QtCore.Qt.FramelessWindowHint) # TODO: maybe remove the stock window frame and make own
+		self.running = True  # used to stop child threads
+		# TODO: maybe remove the stock window frame and make own
+		# self.setWindowFlag(QtCore.Qt.FramelessWindowHint)
 
 		# child thread to check if streams stoped and restart them
 		self.thread = None
-   
+
 		self.setGeometry(50, 50, 1000, 1080)
 
 		# store vlc instances and player widget instances
 		self.medias = []
 		self.players = []
-
+		self.layouts = cycle([GridPlayer, VerticalPlayer])
+		self.currentlayout = None
+		self.centerW = None
+  
 		self.instance = vlc.Instance()
 		self.ref = QtWidgets.QLabel('Wait...', self)
 
@@ -263,7 +280,7 @@ class MainWindow(QMainWindow):
 		# Add actions to view menu
 		load_action = QtWidgets.QAction("Load", self)
 		# refresh_action = QtWidgets.QAction("Refresh", self)
-		toggle_action = QtWidgets.QAction("Clear Layout", self)
+		toggle_action = QtWidgets.QAction("Toggle Layout", self)
 		close_action = QtWidgets.QAction("Close App", self)
 
 		view_menu.addAction(load_action)
@@ -273,18 +290,18 @@ class MainWindow(QMainWindow):
 
 		load_action.triggered.connect(self.loadFile)
 		# refresh_action.triggered.connect(self.refresh)
-		toggle_action.triggered.connect(self.deletePlayers)
+		toggle_action.triggered.connect(self.toggle)
 		close_action.triggered.connect(sys.exit)
 
 		self.setWindowTitle("CCTV Player DEF")
 		self.show()
-		self.startLoader()
-		self.ref.deleteLater()
-		self.StartGridPlayer()
+		# self.startLoader()
+		# self.ref.deleteLater()
+		self.StartPlayerLayout()
 
-		if self.thread == None:
-			self.thread = threading.Thread(target=self.checkPlaying)
-			self.thread.start()
+		# if self.thread == None:
+		# 	self.thread = threading.Thread(target=self.checkPlaying)
+		# 	self.thread.start()
 		if len(sys.argv) == 2:
 			self.loadFile(sys.argv[-1], True)
 
@@ -313,7 +330,6 @@ class MainWindow(QMainWindow):
 		else:
 			self.setWindowTitle("FullScreening")
 			self.setCentralWidget(self.ref)
-			self.StartGridPlayer()
 			self.showFullScreen()
 
 	def startLoader(self):
@@ -330,14 +346,34 @@ class MainWindow(QMainWindow):
 	# TODO: crashes the window - havent implemented new video widget loading
 	def refresh(self):
 		self.setWindowTitle("Refreshing")
-		# self.startLoader()
-		# self.StartGridPlayer()
 		self.assignPlayers()
 
-	def StartGridPlayer(self):
-		self.setWindowTitle("GridPlayer")
-		self.centerW = GridPlayer(self, self.players)
+	def toggle(self):
+		# self.getMedias()
+		# self.startLoader()
+		self.StartPlayerLayout()
+
+	def getMedias(self):
+		self.medias = []
+		try:
+			players = self.centerW.getPlayers()
+			for player in players:
+				print(player.mediaplayer.get_media())
+				self.medias.append(player.mediaplayer)
+		except:
+			pass
+
+	def StartPlayerLayout(self):
+		oldlay = self.centerW
+		if oldlay:
+			# oldlay.deleteLater()
+			oldlay.setParent(None)
+		self.currentlayout = next(self.layouts)
+		self.centerW = self.currentlayout(self, self.medias)
+		self.setWindowTitle(self.currentlayout.__name__)
 		self.setCentralWidget(self.centerW)
+		# if oldlay:
+		# 	oldlay.deleteLater()
 
 	# lags the program out
 	def addStreamSafe(self, source):
@@ -353,25 +389,12 @@ class MainWindow(QMainWindow):
 				media = self.instance.media_new(source)
 				mediaplayer = self.instance.media_player_new()
 				mediaplayer.set_media(media)
-				# use this if using program in mac
-				# if platform.system() == "Darwin":  # for MacOS
-				# 	videoframe = QtWidgets.QMacCocoaViewContainer(0)
-				videoframe = WinFrams(title=source,mediaplayer=mediaplayer)
-				videoframe.setAutoFillBackground(True)
-				if mediaplayer.is_playing():
-					mediaplayer.stop()
-				mediaplayer.set_hwnd(int(videoframe.winId()))
-				# mediaplayer.audio_toggle_mute()
+				self.centerW.createWidget(mediaplayer)
 				mediaplayer.play()
-	
-				# You need to sleep() in order for this check to come back true freezing the program
-				# if mediaplayer.is_playing():
-					# self.centerW.layout.addWidget(videoframe)
-				self.centerW.addWid(videoframe)
-				self.players.append(videoframe)
 				self.medias.append(mediaplayer)
 			except:
 				pass
+
 	# loads playlist file into a playlist window
 	def loadFile(self, file_name=None, autoload=False):
 		if file_name == False or not Path(file_name).exists():
@@ -384,7 +407,7 @@ class MainWindow(QMainWindow):
 		elif Path(file_name).exists() and autoload:
 			line = Path(file_name).read_text()
 			self.addStream(line.strip().split('\n'))
-   
+
 	# old way of loading video instances
 	def gatherStreams(self):
 		self.medias = []
@@ -403,18 +426,17 @@ class MainWindow(QMainWindow):
 				videoframe = QtWidgets.QMacCocoaViewContainer(0)
 			else:
 				videoframe = QtWidgets.QFrame()
-			videoframe.setAutoFillBackground(True)	
+			videoframe.setAutoFillBackground(True)
 			if media.is_playing():
 				media.stop()
 			media.set_hwnd(int(videoframe.winId()))
 			media.play()
 			self.centerW.layout.addWidget(videoframe)
-			# self.centerW.addW(videoframe)
 			self.players.append(videoframe)
-   
+
 	# Clears the layout from player widgets
 	def deletePlayers(self,):
-		for i in reversed(range(self.centerW.layout.count())): 
+		for i in reversed(range(self.centerW.layout.count())):
 			self.centerW.layout.itemAt(i).widget().setParent(None)
 		self.players = []
 
@@ -424,7 +446,7 @@ class MainWindow(QMainWindow):
 			video.release()
 		self.medias = []
 
-	# communicates the program was closed with the thread 
+	# communicates the program was closed with the thread
 	def closeEvent(self, event):
 		self.running = False
 		event.accept()
@@ -432,25 +454,22 @@ class MainWindow(QMainWindow):
 	# Thread to check streams are running and restart them if not
 	def checkPlaying(self):
 		while self.running:
-			print(f'[{threading.get_ident()}]CHECKING {self.centerW.maxx*self.centerW.maxy}')
 			try:
-				for x in range(self.centerW.maxx):
-					for y in range(self.centerW.maxy):
-						w = self.centerW.layout.itemAtPosition(y,x)
-						if w: w = w.widget()
-						else: continue
-						media = w.mediaplayer
-						if media and not media.is_playing():
-							print(f'Restarting {media.get_media().get_mrl()}')
-							media.stop()
-							sleep(1)
-							media.play()
+				# using this method to get the players makes it easier to close streams
+				players = self.centerW.getPlayers()
+				print(f'[{threading.get_ident()}] CHECKING {len(players)}')
+				for w in players:
+					media = w.mediaplayer
+					if media and not media.is_playing():
+						print(f'Restarting {media.get_media().get_mrl()}')
+						media.stop()
+						sleep(1)
+						media.play()
 				sleep(3)
 			except:
 				if self.running:
 					sleep(10)
 		self.thread = None
-
 
 	# TODO might use this to allow the moving of player widgets within the Grid
 	def dragEnterEvent(self, e):
@@ -470,6 +489,7 @@ class MainWindow(QMainWindow):
 				break
 
 		e.accept()
+
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
