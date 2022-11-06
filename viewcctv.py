@@ -68,14 +68,15 @@ class PlaylistWindow(QWidget):
 
 # Each Stream gets a widget with the stream url as the header
 class WinFrams(QtWidgets.QWidget):
-	def __init__(self, parent=None, title=None):
+	def __init__(self, parent=None, title=None, mediaplayer=None):
 		super(WinFrams, self).__init__(parent)
   
 		self.layout = QtWidgets.QVBoxLayout()
+		self.mediaplayer = mediaplayer
 		self.name = QtWidgets.QLabel(parent=self)
 		self.name.setFixedHeight(15)
 		self.name.setText(title)
-		self.name.setContentsMargins(0, 0, 0, 0)
+		# self.name.setContentsMargins(0, 0, 0, 0)
 
 		self.name.setAlignment(QtCore.Qt.AlignCenter)
 		
@@ -85,6 +86,14 @@ class WinFrams(QtWidgets.QWidget):
 		self.layout.setContentsMargins(0, 0, 0, 0)
 		self.setLayout(self.layout)
 		self.layout.addWidget(self.name)
+  
+		self.volumeslider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
+		self.volumeslider.setMaximum(100)
+		self.volumeslider.setValue(self.mediaplayer.audio_get_volume())
+		self.volumeslider.setToolTip("Volume")
+		self.layout.addWidget(self.volumeslider)
+		self.volumeslider.valueChanged.connect(self.setVolume)
+		
 		self.layout.addWidget(self.video)
   
 		self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -101,14 +110,19 @@ class WinFrams(QtWidgets.QWidget):
 		# Menu option events
 		hide_option.triggered.connect(lambda: self.name.setHidden(True))
 		goodbye_option.triggered.connect(lambda: print('Goodbye'))
-		exit_option.triggered.connect(lambda: self.setParent(None))
+		exit_option.triggered.connect(self.deleteStream)
 
 		# Position
 		menu.exec_(self.mapToGlobal(pos))
   
+	def deleteStream(self):
+		# self.mediaplayer.stop()
+		self.setParent(None)
+		self.mediaplayer.release()
+		# self.deleteLater()
+  
 	def eventFilter(self, obj, event):
 		if event.type() == QtCore.QEvent.HoverEnter:
-      
 			self.onHovered()
 		return super(WinFrams, self).eventFilter(obj, event)
   
@@ -117,6 +131,11 @@ class WinFrams(QtWidgets.QWidget):
 
 	def winId(self):
 		return self.video.winId()
+
+	def setVolume(self, Volume):
+		"""Set the volume
+		"""
+		self.mediaplayer.audio_set_volume(Volume)
 
 	# TODO: maybe add ability to move streams around
 	def mouseMoveEvent(self, e):
@@ -216,9 +235,6 @@ class MainWindow(QMainWindow):
 
 		# child thread to check if streams stoped and restart them
 		self.thread = None
-		if self.thread == None:
-			self.thread = threading.Thread(target=self.checkPlaying)
-			self.thread.start()
    
 		self.setGeometry(50, 50, 1000, 1080)
 
@@ -265,6 +281,10 @@ class MainWindow(QMainWindow):
 		self.startLoader()
 		self.ref.deleteLater()
 		self.StartGridPlayer()
+
+		if self.thread == None:
+			self.thread = threading.Thread(target=self.checkPlaying)
+			self.thread.start()
 		if len(sys.argv) == 2:
 			self.loadFile(sys.argv[-1], True)
 
@@ -336,12 +356,12 @@ class MainWindow(QMainWindow):
 				# use this if using program in mac
 				# if platform.system() == "Darwin":  # for MacOS
 				# 	videoframe = QtWidgets.QMacCocoaViewContainer(0)
-				videoframe = WinFrams(title=source)
+				videoframe = WinFrams(title=source,mediaplayer=mediaplayer)
 				videoframe.setAutoFillBackground(True)
 				if mediaplayer.is_playing():
 					mediaplayer.stop()
 				mediaplayer.set_hwnd(int(videoframe.winId()))
-				mediaplayer.audio_toggle_mute()
+				# mediaplayer.audio_toggle_mute()
 				mediaplayer.play()
 	
 				# You need to sleep() in order for this check to come back true freezing the program
@@ -412,14 +432,19 @@ class MainWindow(QMainWindow):
 	# Thread to check streams are running and restart them if not
 	def checkPlaying(self):
 		while self.running:
-			print(f'[{threading.get_ident()}]CHECKING {len(self.medias)}')
+			print(f'[{threading.get_ident()}]CHECKING {self.centerW.maxx*self.centerW.maxy}')
 			try:
-				for media in self.medias:
-					if media and not media.is_playing():
-						print(f'Restarting {media.get_media().get_mrl()}')
-						media.stop()
-						sleep(1)
-						media.play()
+				for x in range(self.centerW.maxx):
+					for y in range(self.centerW.maxy):
+						w = self.centerW.layout.itemAtPosition(y,x)
+						if w: w = w.widget()
+						else: continue
+						media = w.mediaplayer
+						if media and not media.is_playing():
+							print(f'Restarting {media.get_media().get_mrl()}')
+							media.stop()
+							sleep(1)
+							media.play()
 				sleep(3)
 			except:
 				if self.running:
