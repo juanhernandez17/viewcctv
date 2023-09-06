@@ -102,10 +102,20 @@ class WinFrams(QtWidgets.QWidget):
 
 	def right_menu(self, pos):
 		menu = QtWidgets.QMenu()
+  
+		# create aspect ratio Submenu before adding it to the context menu
+		aspectmenu = QtWidgets.QMenu('Aspect')
+		aspect169 = aspectmenu.addAction('16:9')
+		aspect43 = aspectmenu.addAction('4:3')
+		aspectdef = aspectmenu.addAction('Default')
+		aspect169.triggered.connect(lambda: self.setAspect('16:9'))
+		aspect43.triggered.connect(lambda: self.setAspect('4:3'))
+		aspectdef.triggered.connect(lambda: self.setAspect(''))
 
 		# Add menu options
 		hide_option = menu.addAction('hide name')
 		goodbye_option = menu.addAction('GoodBye')
+		aspect_option = menu.addMenu(aspectmenu)
 		exit_option = menu.addAction('Close')
 
 		# Menu option events
@@ -115,6 +125,9 @@ class WinFrams(QtWidgets.QWidget):
 
 		# Position
 		menu.exec_(self.mapToGlobal(pos))
+
+	def setAspect(self,aspect):
+		self.mediaplayer.video_set_aspect_ratio(aspect)
 
 	def deleteStream(self):
 		self.setParent(None)
@@ -259,7 +272,7 @@ class MainWindow(QMainWindow):
 		self.currentlayout = None
 		self.centerW = None
   
-		self.instance = vlc.Instance()
+		self._instance = vlc.Instance()
 		self.ref = QtWidgets.QLabel('Wait...', self)
 
 		# keyboard shortcuts used to work but need to update their code since the way the players are loaded has changed
@@ -386,8 +399,8 @@ class MainWindow(QMainWindow):
 			if source == None and source == '':
 				continue
 			try:
-				media = self.instance.media_new(source)
-				mediaplayer = self.instance.media_player_new()
+				media = self._instance.media_new(source)
+				mediaplayer = self._instance.media_player_new()
 				mediaplayer.set_media(media)
 				self.centerW.createWidget(mediaplayer)
 				mediaplayer.play()
@@ -414,8 +427,8 @@ class MainWindow(QMainWindow):
 		if len(self.medias):
 			return
 		for x in range(1):
-			media = self.instance.media_new(x)
-			mediaplayer = self.instance.media_player_new()
+			media = self._instance.media_new(x)
+			mediaplayer = self._instance.media_player_new()
 			mediaplayer.set_media(media)
 			self.medias.append(mediaplayer)
 

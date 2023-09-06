@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Playlist Files
+*.m3u
+
+# Batch Files
+*.bat
+
+# VScode folder
+.vscode/
