@@ -3,7 +3,7 @@ from pathlib import Path
 # For PyQt5 :
 from PyQt5 import QtWidgets, QtCore
 
-from stream import Stream
+from util import Stream
 
 class PlaylistWindow(QtWidgets.QDialog):
 	lSignal = QtCore.pyqtSignal(Stream)
@@ -12,10 +12,10 @@ class PlaylistWindow(QtWidgets.QDialog):
 		super().__init__(parent)
 
 		self.filename = filename
-		self.layout = QtWidgets.QVBoxLayout()
+		self.organizer = QtWidgets.QVBoxLayout()
 		self.label = QtWidgets.QLabel("Playlist Window")
-		self.layout.addWidget(self.label)
-		self.setLayout(self.layout)
+		self.organizer.addWidget(self.label)
+		self.setLayout(self.organizer)
 		self.streams = []
 		self.loadStreams()
 
@@ -55,7 +55,7 @@ class PlaylistWindow(QtWidgets.QDialog):
 					self.streams.append(tmp)
 					QtWidgets.QListWidgetItem(tmp.stream, self.wlist,1)
 
-		self.layout.addWidget(self.wlist)
+		self.organizer.addWidget(self.wlist)
 		self.wlist.doubleClicked.connect(self.sendStream)
 
 	def sendStream(self):

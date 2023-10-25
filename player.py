@@ -1,97 +1,95 @@
-from enum import auto
-from pathlib import Path
-import sys
-import math
-import platform
-import threading
-from time import sleep
-import vlc
-from itertools import cycle
-from math import sqrt,ceil
 # For PyQt5 :
-from PyQt5.QtWidgets import QApplication, QMainWindow, QShortcut, QWidget, QFrame, QListWidgetItem, QFileDialog, QVBoxLayout
-from PyQt5 import QtWidgets, QtGui, QtCore
-import qdarktheme
-from PyQt5.QtGui import QKeySequence
-import pywinstyles
-
+from PyQt5 import QtGui, QtWidgets, QtCore
+import vlc
 
 class PlayerHeader(QtWidgets.QWidget): #1
 
 	def __init__(self, parent):
 		super().__init__(parent)
-		self.layout = QtWidgets.QHBoxLayout(self)
-		self.layout.setSpacing(0)
-		self.layout.setContentsMargins(0, 0, 0, 0)
+		self.organizer = QtWidgets.QHBoxLayout(self)
+		self.setStyleSheet(r'QPushButton{color:green}')
+		self.organizer.setSpacing(0)
+		self.organizer.setContentsMargins(0, 0, 0, 0)
 		self.playpause = QtWidgets.QPushButton('Pause',self)
+		self.setMaximumHeight(self.playpause.height())
 		self.playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPause))
-		self.layout.addWidget(self.playpause)
+		self.organizer.addWidget(self.playpause)
 		self.stop = QtWidgets.QPushButton('Stop',self)
 		self.stop.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaStop))
-		self.layout.addWidget(self.stop)
+		self.organizer.addWidget(self.stop)
 		self.volumeslider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
-		self.layout.addWidget(self.volumeslider)
+		self.organizer.addWidget(self.volumeslider)
 		self.volumeslider.setMaximum(100)
 
-	def update_position(self): 
-		if hasattr(self.parent(), 'viewport'):
-			parent_rect = self.parent().viewport().rect()
-		else:
-			parent_rect = self.parent().rect()
+	# def update_position(self): 
+	# 	if hasattr(self.parent(), 'viewport'):
+	# 		parent_rect = self.parent().viewport().rect()
+	# 	else:
+	# 		parent_rect = self.parent().rect()
 
-		if not parent_rect:
-			return
+	# 	if not parent_rect:
+	# 		return
 
-		self.playpause.setFixedHeight(self.height())
-		self.stop.setFixedHeight(self.height())
-		self.setGeometry(0, 0, parent_rect.width(), self.height())
+	# 	self.playpause.setFixedHeight(self.height())
+	# 	self.stop.setFixedHeight(self.height())
+	# 	self.setGeometry(0, 0, parent_rect.width(), self.height())
 
-	def resizeEvent(self, event): #2
-		super().resizeEvent(event)
-		self.update_position()
+	# def resizeEvent(self, event): #2
+	# 	super().resizeEvent(event)
+	# 	self.update_position()
 
-	def mousePressEvent(self, event): #4
-		print('pessed')
+	# def mousePressEvent(self, event): #4
+	# 	print('pessed')
 		# self.parent().floatingButtonClicked.emit()
 
 
-class WinFrame(QFrame):
+class WinFrame(QtWidgets.QFrame):
 	def __init__(self, parent=None):
 		super().__init__(parent)
-		self.paddingLeft = 5
-		self.paddingTop = 51
+		# self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+		# self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-	def update_position(self,headersize=0): 
-		if hasattr(self.parent(), 'viewport'):
-			parent_rect = self.parent().viewport().rect()
-		else:
-			parent_rect = self.parent().rect()
+	# def update_position(self,headersize=0): 
+	# 	if hasattr(self.parent(), 'viewport'):
+	# 		parent_rect = self.parent().viewport().rect()
+	# 	else:
+	# 		parent_rect = self.parent().rect()
 
-		if not parent_rect:
-			return
-		self.setGeometry(0, headersize, parent_rect.width(), parent_rect.height()-headersize)
+	# 	if not parent_rect:
+	# 		return
+	# 	self.setGeometry(0, headersize, parent_rect.width(), parent_rect.height()-headersize)
 
-	def resizeEvent(self, event): #2
-		super().resizeEvent(event)
-		# self.update_position()
+	# def resizeEvent(self, event): #2
+	# 	super().resizeEvent(event)
+	# 	self.update_position()
 
-class Player(QWidget):
+class Player(QtWidgets.QWidget):
 	playerDelete = QtCore.pyqtSignal(str)
 	
-	def __init__(self, parent=None):
+	def __init__(self, media,mediaplayer,parent=None):
 		super().__init__(parent)
-		self.paddinTop = 0
-		self.mrl = None
-		self.mediaplayer = None
-		self.media = None
+		# self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+		# self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+		self.media = media
+		self.mediaplayer = mediaplayer
+		self.mrl = media.get_mrl()
 		self.streamurl = None
 		self.player = WinFrame(self)
-		self.title = PlayerHeader(self)
-		self.title.volumeslider.valueChanged.connect(self.setVolume)
-		self.title.playpause.clicked.connect(self.playPause)
-		self.title.stop.clicked.connect(self.stop)
+		self.header = PlayerHeader(self)
+		# self.header.hide()
+		self.header.volumeslider.valueChanged.connect(self.setVolume)
+		self.header.playpause.clicked.connect(self.playPause)
+		self.header.stop.clicked.connect(self.mediaplayer.stop)
 		self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 		self.customContextMenuRequested.connect(self.right_menu)
+
+		self.organizer = QtWidgets.QVBoxLayout()
+		self.organizer.addWidget(self.header)
+		self.organizer.addWidget(self.player)
+		self.organizer.setSpacing(0)
+		self.organizer.setContentsMargins(0, 0, 0, 0)
+		self.setLayout(self.organizer)
+		self.loadMedia()
 
 	def right_menu(self, pos):
 		menu = QtWidgets.QMenu()
@@ -106,58 +104,77 @@ class Player(QWidget):
 		aspectdef.triggered.connect(lambda: self.setAspect(''))
 
 		# Add menu options
-		hide_option = menu.addAction('hide name')
+		hide_option = menu.addAction('Toggle Header')
 		goodbye_option = menu.addAction('GoodBye')
 		aspect_option = menu.addMenu(aspectmenu)
 		exit_option = menu.addAction('Close')
 
 		# Menu option events
-		hide_option.triggered.connect(self.removeHeader)
+		hide_option.triggered.connect(self.toggleHeader)
 		# goodbye_option.triggered.connect(lambda: print('Goodbye'))
 		exit_option.triggered.connect(self.deleteStream)
 
 		# Position
 		menu.exec_(self.mapToGlobal(pos))
 
+	def loadMedia(self):
+
+		self.mediaplayer.video_set_mouse_input(False)
+		self.mediaplayer.video_set_key_input(False)
+		self.mediaplayer.set_hwnd(int(self.player.winId()))
+		self.mediaplayer.set_media(self.media)
+		self.vlcEventManager = self.mediaplayer.event_manager()
+		self.setEventManager()
+		self.mediaplayer.play()
+		self.header.volumeslider.setValue(self.mediaplayer.audio_get_volume())
+  
+  
 	def setAspect(self,aspect):
 		self.mediaplayer.video_set_aspect_ratio(aspect)
 
-	def removeHeader(self):
-		self.title.setFixedHeight(0)
-		self.player.update_position()
+	def toggleHeader(self):
+		if self.header.isHidden():
+			self.header.show()
+		else:
+			self.header.hide()
 
 	def resizeEvent(self, event):
 		super().resizeEvent(event)
-		self.title.update_position() #4
-		if self.player:
-			self.player.update_position(self.title.height()) #4
-  
+
+	def setEventManager(self):
+		self.vlcEventManager.event_attach(vlc.EventType.MediaPlayerPaused,self.playerPaused)
+		self.vlcEventManager.event_attach(vlc.EventType.MediaPlayerPlaying,self.playerPlaying)
+		self.vlcEventManager.event_attach(vlc.EventType.MediaPlayerStopped,self.playerPaused)
+		# sometimes an erro will crash the whole program
+		self.vlcEventManager.event_attach(vlc.EventType.MediaPlayerEncounteredError,self.error)
+
 	def setVolume(self, Volume):
 		if self.mediaplayer:
 			self.mediaplayer.audio_set_volume(Volume)
 
-	def stop(self):
-		self.mediaplayer.stop()
+	def playerPlaying(self,event):
+		self.header.playpause.setText("Pause")
+		self.header.playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPause))
+
+	def playerPaused(self,event):
+		self.header.playpause.setText("Play")
+		self.header.playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
 	def playPause(self):
-		"""Toggle play/pause status
-		"""
 		if self.mediaplayer.is_playing():
 			self.mediaplayer.pause()
-			self.title.playpause.setText("Play")
-			self.title.playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 		else:
-			if self.mediaplayer.play() == -1:
-				return
 			self.mediaplayer.play()
-			self.title.playpause.setText("Pause")
-			self.title.playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+
+	def error(self,v):
+		self.mediaplayer.stop()
+		print(v)
 
 	def deleteStream(self):
-		self.playerDelete.emit(self.mrl)
-		self.setParent(None)
-		self.__del__()
-
-	def __del__(self):
+		self.mediaplayer.stop()
 		self.mediaplayer.release()
-
+		self.header.deleteLater()
+		self.player.deleteLater()
+		self.playerDelete.emit(self.mrl)
+		self.deleteLater()
+		pass

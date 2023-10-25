@@ -8,55 +8,65 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 import qdarktheme
 import pywinstyles
 from player import Player
-from stream import Stream
+from util import Stream, chunks
 from playlist import PlaylistWindow
 
 class ViewWidget(QtWidgets.QWidget):
-	layoutSignal = QtCore.pyqtSignal()
-	def changeLayout(self):
-		self.layoutSignal.emit()
+	def __init__(self,parent):
+		super().__init__(parent)
+		self.widgets = []
+
+	def clear(self):
+		for x in self.widgets:
+			self.organizer.removeWidget(x)
+		# self.organizer.addWidget(tmp)
+		# self.show()
 
 class ListWidget(ViewWidget):
 	def __init__(self,parent):
 		super().__init__(parent)
-		self.layout = QtWidgets.QGridLayout()
-		self.layout.setSpacing(0)
-		self.layout.setContentsMargins(0, 0, 0, 0)
-		self.setLayout(self.layout)
+		self.organizer = QtWidgets.QGridLayout()
+		self.organizer.setSpacing(0)
+		self.organizer.setContentsMargins(0, 0, 0, 0)
+		self.setLayout(self.organizer)
   
 	def display(self,labels):
-		self.labels = list(labels.values())
-		for x in self.labels: self.layout.addWidget(x)
+		self.clear()
+		self.widgets = list(labels.values())
+		if len(labels) == 0: return
+		for x in self.widgets: self.organizer.addWidget(x)
 
 class GridWidget(ViewWidget):
 	def __init__(self,parent):
 		super().__init__(parent)
-		self.layout = QtWidgets.QGridLayout()
-		self.layout.setSpacing(0)
-		self.layout.setContentsMargins(0, 0, 0, 0)
-		self.setLayout(self.layout)
+		self.organizer = QtWidgets.QGridLayout()
+		self.organizer.setSpacing(0)
+		self.organizer.setContentsMargins(0, 0, 0, 0)
+		self.setLayout(self.organizer)
+
 	def display(self,labels):
-		self.labels = list(labels.values())
-		sz = ceil(sqrt(len(self.labels)))
-		gn = list(chunks(self.labels,sz))
+		self.clear()
+		self.widgets = list(labels.values())
+		if len(labels) == 0: return
+		sz = ceil(sqrt(len(self.widgets)))
+		gn = list(chunks(self.widgets,sz))
 		for row in range(len(gn)):
 			for column in range(len(gn[row])):
-				self.layout.addWidget(gn[row][column],row+1,column)
+				self.organizer.addWidget(gn[row][column],row,column)
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setWindowTitle("CCTV Player")
-		self.headersize = cycle([0,30])
+		self.setStyleSheet('background-color:black')
+		# self.setStyleSheet('background-color:red')
 		self.frames = {}
 		self.centerWidget = None
 		self.vlc_instance = vlc.Instance()
 		self.setGeometry(50, 50, 300, 380)
-		self.refreshShortcut = QtWidgets.QShortcut(QtGui.QKeySequence("F5"), self)
-		# self.refreshShortcut.activated.connect(self.refresh)
-		self.fullscreenShortcut = QtWidgets.QShortcut(QtGui.QKeySequence("F11"), self)
-		self.fullscreenShortcut.activated.connect(self.toggleFullScreen)
+		self.loadShortcuts()
 		self.loadHeader()
 		self.layouts = cycle([GridWidget,ListWidget])
 		self.changeLayout()
@@ -65,10 +75,16 @@ class MainWindow(QtWidgets.QMainWindow):
 		if len(sys.argv) == 2:
 			self.loadFile(sys.argv[-1], True)
 
+	def loadShortcuts(self):
+		self.refreshShortcut = QtWidgets.QShortcut(QtGui.QKeySequence("F5"), self)
+		self.refreshShortcut.activated.connect(self.refresh)
+		self.fullscreenShortcut = QtWidgets.QShortcut(QtGui.QKeySequence("F11"), self)
+		self.fullscreenShortcut.activated.connect(self.toggleFullScreen)
+
 	def loadHeader(self):
-		menu_bar = self.menuBar()
+		self.menu_bar = self.menuBar()
 		# View menu
-		view_menu = menu_bar.addMenu("View")
+		view_menu = self.menu_bar.addMenu("View")
 
 		# Add actions to view menu
 		load_action = QtWidgets.QAction("Load", self)
@@ -81,7 +97,7 @@ class MainWindow(QtWidgets.QMainWindow):
 		view_menu.addAction(toggle_action)
 		view_menu.addAction(close_action)
 
-		load_action.triggered.connect(self.loadFile)
+		load_action.triggered.connect(lambda :self.loadFile())
 		refresh_action.triggered.connect(self.refresh)
 		toggle_action.triggered.connect(self.changeLayout)
 		close_action.triggered.connect(sys.exit)
@@ -107,69 +123,45 @@ class MainWindow(QtWidgets.QMainWindow):
 						tmp = None
 
 	def changeLayout(self):
+		if self.centerWidget:
+			self.centerWidget.deleteLater()
 		self.centerWidget = next(self.layouts)(self)
-		self.centerWidget.layoutSignal.connect(self.changeLayout)
 		if len(self.frames) > 0:
 			self.centerWidget.display(self.frames)
-		else:
-			self.loadFile()
 		self.setCentralWidget(self.centerWidget)
 
 	def loadStream(self,streamurl):
-		frame = Player(self)
 		mediaplayer = self.vlc_instance.media_player_new()
-		mediaplayer.video_set_mouse_input(False)
-		mediaplayer.video_set_key_input(False)
-		mediaplayer.set_hwnd(int(frame.player.winId()))
 		media = self.vlc_instance.media_new(streamurl.stream)
-		frame.mrl = media.get_mrl()
-		mediaplayer.set_media(media)
-		mediaplayer.play()
-		frame.mediaplayer = mediaplayer
-		frame.media = media
+		frame = Player(media,mediaplayer,self)
 		frame.streamurl = streamurl
-		frame.title.volumeslider.setValue(mediaplayer.audio_get_volume())
 		frame.playerDelete.connect(self.deleteStream)
+		
 		
 		self.frames[streamurl.stream] = frame
 		if self.centerWidget:
 			self.centerWidget.display(self.frames)
 
 	def refresh(self):
-		videos = []
-		for x in self.frames.values():
-			videos.append(x.streamurl)
-			x.setParent(None)
-			self.centerWidget.layout.removeWidget(x)
-			del x
+		videos = [x.streamurl for x in self.frames.values()]
+		self.centerWidget.clear()
+		for x in self.frames.copy().values():x.deleteStream()
 		self.frames = {}
 		for x in videos:self.loadStream(x)
 
-
 	def deleteStream(self,mrl):
-		instance = self.frames.pop(mrl)
-		# instance.setParent(None)
-		self.centerWidget.layout.removeWidget(instance)
-		# del instance
-  
-	def toggleHeaders(self):
-		sz = next(self.headersize)
-		for x in self.frames.values():
-			print(x.title.height())
-			x.title.setFixedHeight(sz)
-			x.player.update_position()
+		self.frames.pop(mrl)
+		self.centerWidget.display(self.frames)
 
 	def toggleFullScreen(self):
 		if self.isFullScreen():
-			self.toggleHeaders()
+			for x in self.frames.values():x.header.show()
+			self.menu_bar.show()
 			self.showNormal()
 		else:
-			self.toggleHeaders()
+			for x in self.frames.values():x.header.hide()
+			self.menu_bar.hide()
 			self.showFullScreen()
-
-def chunks(lst, n):
-	for i in range(0, len(lst), n):
-		yield lst[i:i + n]
 
 if __name__ == '__main__':
 	app = QtWidgets.QApplication(sys.argv)
